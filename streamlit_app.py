@@ -127,7 +127,7 @@ components.html("""
 # CONSTANTS
 # ─────────────────────────────────────────────
 ANGELS_ID = 108
-PT = pytz.timezone('America/Los_Angeles')
+PT = zoneinfo.timezone('America/Los_Angeles')
 
 # ─────────────────────────────────────────────
 # DATA HELPERS
