@@ -1,5 +1,5 @@
 streamlit
-statsapi
+mlb-statsapi
 pybaseball
 pandas
 requests
