@@ -315,15 +315,24 @@ def get_standings_table():
         return pd.DataFrame()
 
 def get_reddit_news(sub="angelsbaseball", limit=8):
-    url = f"https://www.reddit.com/r/{sub}/hot.json?limit={limit+3}"
-    headers = {'User-agent': 'HalosHub 3.0'}
-    try:
-        res = requests.get(url, headers=headers).json()
-        posts = [p['data'] for p in res['data']['children'] if not p['data']['stickied']][:limit]
-        return [{'title': p['title'], 'url': f"https://www.reddit.com{p['permalink']}",
-                 'meta': f"👍 {p['ups']:,}  ·  u/{p['author']}", 'source': 'reddit'} for p in posts]
-    except:
-        return []
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+    }
+    for url in [
+        f"https://www.reddit.com/r/{sub}/hot.json?limit={limit+3}&raw_json=1",
+        f"https://old.reddit.com/r/{sub}/hot.json?limit={limit+3}&raw_json=1",
+    ]:
+        try:
+            res = requests.get(url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                posts = [p['data'] for p in data['data']['children'] if not p['data'].get('stickied')][:limit]
+                return [{'title': p['title'], 'url': f"https://www.reddit.com{p['permalink']}",
+                         'meta': f"👍 {p['ups']:,}  ·  u/{p['author']}", 'source': 'reddit'} for p in posts]
+        except:
+            continue
+    return []
 
 def get_rss_news(url, source_key, limit=6):
     try:
@@ -422,14 +431,32 @@ with col_main:
         )
         game = next((g for g in sched if g['status'] == 'In Progress'), sched[-1])
 
-        is_live = game['status'] == 'In Progress'
-        g_cols = st.columns([5, 1, 5])
+        is_live   = game['status'] == 'In Progress'
+        is_future = game['status'] in ('Preview', 'Pre-Game', 'Scheduled', 'Warmup')
 
+        # Parse gametime
+        raw_time = game.get('game_datetime', '')
+        try:
+            from datetime import datetime
+            import pytz
+            pt = pytz.timezone('America/Los_Angeles')
+            gt = datetime.fromisoformat(raw_time.replace('Z', '+00:00')).astimezone(pt)
+            game_time_str = gt.strftime('%-I:%M %p PT')
+        except:
+            game_time_str = game.get('game_date', '')
+
+        venue    = game.get('venue_name', '')
+        away_sp  = game.get('away_probable_pitcher', 'TBD')
+        home_sp  = game.get('home_probable_pitcher', 'TBD')
+
+        # Score display
+        g_cols = st.columns([5, 1, 5])
         with g_cols[0]:
             st.markdown(f"""
             <div>
                 <div class="hero-team">{game['away_name']}</div>
-                <div class="hero-runs">{game.get('away_score', '–')}</div>
+                <div class="hero-runs">{game.get('away_score', '–') if not is_future else '–'}</div>
+                <div style="font-family:'Inter',sans-serif;font-size:0.78rem;color:#6B7280;margin-top:4px;">SP: {away_sp}</div>
             </div>
             """, unsafe_allow_html=True)
         with g_cols[1]:
@@ -438,16 +465,18 @@ with col_main:
             st.markdown(f"""
             <div>
                 <div class="hero-team">{game['home_name']}</div>
-                <div class="hero-runs">{game.get('home_score', '–')}</div>
+                <div class="hero-runs">{game.get('home_score', '–') if not is_future else '–'}</div>
+                <div style="font-family:'Inter',sans-serif;font-size:0.78rem;color:#6B7280;margin-top:4px;">SP: {home_sp}</div>
             </div>
             """, unsafe_allow_html=True)
 
-        status_badge = f'<span class="hero-status">{"● Live" if is_live else game["status"]}</span>'
+        # Status bar with time + venue
+        status_label = "● Live" if is_live else game['status']
         st.markdown(f"""
-        {status_badge}
-        <div class="hero-meta">
-            ⚾ &nbsp;<b>Probables:</b>&nbsp;
-            {game.get('away_probable_pitcher', 'TBD')} vs {game.get('home_probable_pitcher', 'TBD')}
+        <span class="hero-status">{status_label}</span>
+        <div class="hero-meta" style="display:flex;gap:24px;flex-wrap:wrap;">
+            <span>🕐 <b>{game_time_str}</b></span>
+            <span>🏟️ <b>{venue}</b></span>
         </div>
         """, unsafe_allow_html=True)
 
